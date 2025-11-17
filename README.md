@@ -7,8 +7,8 @@ CrediFesta é um projeto para gestão de créditos em eventos escolares. Permite
 ## O que há neste repositório
 
 - `DER_CrediFesta.md` — Documento de Especificação de Requisitos (visão funcional, RN, atores, critérios de aceite e protótipos de API).
-- `diagramas/` — Diagramas em PlantUML (contexto, containers e componentes). Caminho: `diagramas/contexto/`, `diagramas/container/`, `diagramas/componentes/`.
-  - `diagramas/contexto/CrediFesta-contexto.puml`
+- `diagramas/` — Diagramas em PlantUML (contexto, containers e componentes). Caminho: `diagramas/diagrama-de-contexto/`, `diagramas/container/`, `diagramas/componentes/`.
+  - `diagramas/diagrama-de-contexto/CrediFesta-contexto.puml`
   - `diagramas/container/CrediFesta-container.puml`
   - `diagramas/componentes/CrediFesta-componentes.puml`
 
