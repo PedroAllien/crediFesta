@@ -1,0 +1,32 @@
+@startuml CrediFesta_Contexto
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+LAYOUT_WITH_LEGEND()
+
+title CrediFesta — Diagrama de Contexto (C4 Nível 1)
+
+Person(responsavel, "Responsável (Pai/Mãe)", "Recarrega créditos, define limites, consulta saldo/histórico.")
+Person(aluno, "Aluno", "Exibe QR/código; consulta saldo.")
+Person(atendente, "Atendente (PDV)", "Escaneia QR, totaliza itens e confirma venda.")
+Person(organizador, "Organizador/Administrador", "Cadastra eventos, catálogos, equipes; relatórios.")
+
+System(credifesta, "CrediFesta", "App/Web + API para gestão de créditos e vendas em eventos escolares.")
+
+System_Ext(psp, "Gateway/PSP de Pagamentos", "PIX, Cartão (PCI), antifraude/3DS, webhooks")
+System_Ext(notify, "Serviço de Notificações", "Push (Firebase/APNS) e e-mail")
+System_Ext(storage, "Armazenamento de Arquivos", "S3/MinIO")
+System_Ext(kms, "KMS/Vault", "Gestão/rotação de chaves (HMAC/cripto)")
+System_Ext(obs, "Observabilidade/Logs", "Métricas (p95), logs, traços")
+
+Rel(responsavel, credifesta, "Recarrega (PIX/cartão), define limite, recebe avisos", "HTTPS/TLS")
+Rel(aluno,       credifesta, "Gera QR dinâmico; consulta saldo", "HTTPS/TLS")
+Rel(atendente,   credifesta, "Lê QR → valida → débito (PDV)", "HTTPS/TLS")
+Rel(organizador, credifesta, "Administra eventos/produtos/relatórios", "HTTPS/TLS")
+
+Rel(credifesta, psp, "Cria cobranças, captura; recebe webhooks", "HTTPS + HMAC")
+Rel(credifesta, notify, "Push/e-mail (compra, saldo baixo)", "HTTPS")
+Rel(credifesta, storage, "Exporta CSV/PDF; artefatos", "S3 API")
+Rel(credifesta, kms, "Obtém chaves (HMAC/cripto)", "KMS API")
+Rel(credifesta, obs, "Envia métricas/logs/traços", "Agent/API")
+
+SHOW_LEGEND()
+@enduml
