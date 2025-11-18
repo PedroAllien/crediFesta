@@ -1,0 +1,101 @@
+@startuml CrediFesta_Containers
+' Se puder, use a lib oficial:
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+skinparam wrapWidth 240
+skinparam maxMessageSize 240
+skinparam rectangle {
+  BorderColor #0B5FFF
+  RoundCorner 12
+}
+skinparam shadowing false
+skinparam ArrowColor #555555
+skinparam NoteBackgroundColor #f7f9fc
+skinparam NoteBorderColor #c7d3e7
+skinparam defaultTextAlignment center
+title CrediFesta — C4: Containers (Nível 2)
+
+' Pessoas (externos)
+Person(responsavel, "Responsável", "Recarrega créditos, define limites, consulta saldo/histórico.")
+Person(aluno, "Aluno", "Gera/mostra QR/código para compra; consulta saldo.")
+Person(atendente, "Atendente (PDV)", "Escaneia QR, seleciona itens e confirma venda.")
+Person(organizador, "Organizador/Administrador", "Cadastra evento, catálogo, equipe; emite relatórios.")
+
+' Sistema em foco
+System_Boundary(sb, "CrediFesta") {
+
+  ' Frontends
+  Container(web_admin, "Painel Admin (Web)", "React/Next (ou Django Admin)", "Gestão de eventos, produtos, usuários, relatórios.")
+  Container(web_pdv, "PDV Web/Tablet", "Web App (SPA)", "Venda rápida: escaneia QR, totaliza itens, confirma débito.")
+  Container(mob_responsavel, "App Responsável", "Flutter/Android+iOS", "Recarrega (PIX/cartão), saldo/histórico, limites, notificações.")
+  Container(mob_aluno, "App Aluno", "Flutter/Android+iOS", "Exibe QR/código dinâmico; consulta saldo.")
+
+  ' Backend
+  Container(api, "API Backend", "Django/DRF", "Autenticação, regras de negócio, verificação de QR (nonce/assinatura), vendas idempotentes, relatórios.")
+  ContainerDb(db, "Banco de Dados", "PostgreSQL", "Dados transacionais (alunos, vendas, recargas, catálogos).")
+  Container(cache, "Cache/Store de Nonce e Chaves de Idempotência", "Redis", "Anti-replay de QR (nonce) e idempotência de requisição.")
+  Container(queue, "Fila/Worker", "Celery/RQ + Redis", "Processos assíncronos: relatórios, conciliação, notificações em lote.")
+  Container(files, "Armazenamento de Arquivos", "S3/MinIO", "Relatórios CSV/PDF, artefatos de export.")
+
+  ' Integrações externas
+  Container_Ext(psp, "Gateway/PSP de Pagamentos", "API Externa", "PIX imediato, cartão (PCI via provedor), antifraude/3DS, webhooks.")
+  Container_Ext(push, "Serviço de Notificações", "Firebase/APNS + E-mail", "Push e e-mails transacionais.")
+  Container_Ext(kms, "KMS/Vault", "KMS/Vault", "Gestão e rotação de chaves (HMAC QR, criptografia).")
+  Container_Ext(obs, "Observabilidade", "Logs/Métricas/Traços", "Coleta latência p95, throughput, erros, auditoria.")
+}
+
+' Relações dos atores com os frontends
+Rel(responsavel, mob_responsavel, "Usa", "HTTPS/TLS")
+Rel(aluno, mob_aluno, "Usa", "HTTPS/TLS")
+Rel(atendente, web_pdv, "Usa", "HTTPS/TLS")
+Rel(organizador, web_admin, "Usa", "HTTPS/TLS")
+
+' Frontends -> API
+Rel(mob_responsavel, api, "Login, recarga, saldo/histórico, limites", "HTTPS/TLS")
+Rel(mob_aluno, api, "Gera QR/código dinâmico (p=payload, sig=HMAC)", "HTTPS/TLS")
+Rel(web_pdv, api, "Escanear QR → validar nonce/assinatura → criar venda", "HTTPS/TLS")
+Rel(web_admin, api, "CRUD eventos, catálogo, usuários; relatórios", "HTTPS/TLS")
+
+' API -> Internos
+Rel(api, db, "CRUD transacional", "TLS/SSL (quando disponível)")
+Rel(api, cache, "Registrar/validar nonce; Idempotency-Key", "TCP/TLS (quando disponível)")
+Rel(api, files, "Exportar relatórios (CSV/PDF)", "S3 API (TLS)")
+Rel(api, queue, "Dispara jobs assíncronos", "Redis/AMQP")
+Rel(api, kms, "Obter/rotacionar chaves HMAC/cripto", "KMS API (TLS)")
+Rel(api, obs, "Métricas/logs/traços", "Agent/API")
+
+' Pagamentos / Notificações
+Rel(api, psp, "Criar cobranças PIX/cartão; consultar/capturar", "HTTPS/TLS, HMAC/Assinatura")
+Rel(psp, api, "Webhooks (pago, capturado, chargeback) — idempotente", "HTTPS/TLS + Assinatura")
+Rel(api, push, "Notificações (compra, saldo baixo, eventos)", "HTTPS/TLS")
+
+' Worker
+Rel(queue, db, "Leitura/escrita (relatórios, conciliação)", "TLS/SSL")
+Rel(queue, files, "Grava exportações", "S3 API (TLS)")
+Rel(queue, obs, "Emite métricas/logs", "Agent/API")
+
+' Notas de segurança e RNFs
+Note right of api
+- RNF-SEG-02: TLS 1.2+ em trânsito
+- Criptografia em repouso (DB/arquivos)
+- JWT/Session, RBAC + ABAC (SoD)
+- LGPD: mínimo necessário
+- Idempotência (vendas/webhooks)
+- QR com nonce + assinatura (anti-replay)
+end note
+
+Note bottom of web_pdv
+Fluxo crítico de latência:
+p95 ≤ 2s (leitura → validação → débito)
+end note
+
+' Fluxo de venda (visão de relações)
+' 1) PDV escaneia QR -> API verifica assinatura (HMAC KMS), nonce (Redis), escopo (evento/barraca)
+' 2) API debita em transação (DB) e registra idempotência
+' 3) API notifica responsável (push/e-mail)
+' 4) Métricas/Logs/Traços para Observabilidade
+
+footer
+Baseado no DER, Histórias de Usuário e Casos de Uso (CrediFesta).
+endfooter
+@enduml
