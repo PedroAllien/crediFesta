@@ -1,0 +1,88 @@
+@startuml CrediFesta_API_Components
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title CrediFesta — C4 (Nível 3) • Componentes da API (Django/DRF)
+
+' ------------------------------------------------------------
+' Limite do Container: API Backend
+' ------------------------------------------------------------
+Container_Boundary(api_b, "API Backend (Django/DRF)") {
+
+  Component(auth, "Auth & Identidade", "DRF + JWT/Session", "Login/refresh, RBAC, ABAC (SoD), perfis.")
+  Component(qr_sign, "QR Signer", "HMAC (KMS/Vault)", "Gera/valida payload (p) + assinatura (sig), TTL, kid.")
+  Component(anti_replay, "Anti-Replay", "Redis", "Registro de nonces com TTL (SETNX); bloqueia reuso.")
+  Component(vendas, "PDV/Vendas", "Service/Views", "Escanear QR → validar → débito; estorno; histórico. **Pontos de idempotência.**")
+  Component(pagamentos, "Pagamentos (PSP)", "Adapter", "PIX, Cartão tokenizado; 3DS/antifraude; conciliação parcial.")
+  Component(webhooks, "Webhooks PSP", "Views", "Recebe confirmações/chargebacks. **Idempotente (event_id UNIQUE).**")
+  Component(notificacoes, "Notificações", "Adapter", "Push (Firebase/APNS) + e-mail transacional.")
+  Component(relatorios, "Relatórios", "Service", "Consultas, exportações CSV/PDF.")
+  Component(conciliacao, "Conciliação & Jobs", "Worker/Celery", "Batches: conciliação diária, fechamento, expirações.")
+
+  Component(idempotency, "Idempotency Store", "Redis", "Armazena Idempotency-Key de requisições (vendas/webhooks).")
+  Component(obs, "Observabilidade", "Middleware/Exporters", "Métricas p50/p95/p99, error rate, traces, auditoria.")
+}
+
+' ------------------------------------------------------------
+' Dependências externas do Container API
+' ------------------------------------------------------------
+ContainerDb(db, "PostgreSQL", "Banco de Dados", "Dados transacionais (alunos, vendas, recargas, catálogos).")
+Container(cache, "Redis", "Cache/Chaves", "Nonces e Idempotency-Keys.")
+Container(files, "S3/MinIO", "Arquivos", "Relatórios CSV/PDF, artefatos.")
+Container_Ext(psp, "Gateway/PSP", "Externo", "PIX, Cartão (PCI), antifraude/3DS, webhooks.")
+Container_Ext(push, "Notificações", "Externo", "Firebase/APNS + e-mail.")
+Container_Ext(kms, "KMS/Vault", "Externo", "Gestão/rotação de chaves (HMAC/cripto).")
+Container_Ext(telemetry, "Observabilidade", "Externo", "Métricas, logs, traços.")
+
+' ------------------------------------------------------------
+' Relações entre componentes internos
+' ------------------------------------------------------------
+Rel(auth, vendas, "Autoriza papéis/atributos (RBAC/ABAC)")
+Rel(vendas, qr_sign, "Valida assinatura (sig) / TTL")
+Rel(vendas, anti_replay, "Marca/checa nonce (SETNX/TTL)")
+Rel(vendas, pagamentos, "Cria/captura transação (quando necessário)")
+Rel(vendas, idempotency, "Verifica/grava Idempotency-Key")
+Rel(vendas, notificacoes, "Dispara push/e-mail (compra/estorno)")
+Rel(vendas, relatorios, "Consulta dados para extrato/histórico")
+
+Rel(pagamentos, psp, "Cria cobranças/autoriza; consulta status", "HTTPS/TLS + HMAC")
+Rel(webhooks, idempotency, "Confere event_id UNIQUE (idempotência)")
+Rel(webhooks, pagamentos, "Atualiza status/timeline pagamento")
+Rel(webhooks, vendas, "Confirma crédito/sincroniza efeitos (quando assíncrono)")
+Rel(webhooks, notificacoes, "Avisos de confirmação/chargeback")
+
+Rel(conciliacao, pagamentos, "Conciliação diária (PSP ↔ DB)")
+Rel(conciliacao, relatorios, "Gera relatórios/fechamento")
+Rel(conciliacao, notificacoes, "Envio em lote (opcional)")
+
+Rel(auth, db, "CRUD usuários/perfis", "SQL/TLS")
+Rel(vendas, db, "Transações de venda/estorno", "SQL/TLS")
+Rel(pagamentos, db, "Persistência de tentativas/status", "SQL/TLS")
+Rel(relatorios, db, "Consultas agregadas", "SQL/TLS")
+Rel(conciliacao, db, "Atualizações de conciliação/fechamento", "SQL/TLS")
+
+Rel(relatorios, files, "Exporta CSV/PDF", "S3 API (TLS)")
+Rel(notificacoes, push, "Push/e-mail", "HTTPS/TLS")
+Rel(qr_sign, kms, "Obtém/rota chaves (kid)", "KMS API (TLS)")
+Rel(anti_replay, cache, "Nonces (TTL)", "TCP")
+Rel(idempotency, cache, "Idempotency-Keys", "TCP")
+Rel(obs, telemetry, "Exporta métricas/logs/traços", "Agent/API")
+
+' ------------------------------------------------------------
+' Notas de fronteiras transacionais e idempotência
+' ------------------------------------------------------------
+' Fronteira de transação (vendas/estorno)
+'   - Inicia transação DB
+'   - Verifica assinatura (qr_sign) e nonce (anti_replay)
+'   - Checa saldo/limites (regra)
+'   - Debita/estorna
+'   - Commit (se sucesso); rollback (se falha)
+'   - Registra Idempotency-Key (antes do commit)
+' Ponto de idempotência:
+'   - Vendas: header "Idempotency-Key" (UUID) → idempotency (Redis) -> retorna a mesma venda
+'   - Webhooks PSP: event_id UNIQUE (DB/Redis) → descarta replays
+
+SHOW_LEGEND()
+@enduml
