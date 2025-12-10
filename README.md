@@ -3,6 +3,15 @@
 ## Visão rápida
 
 CrediFesta é um projeto para gestão de créditos em eventos escolares. Permite que responsáveis recarreguem saldo (PIX/cartão), que alunos apresentem um código/QR para compra rápida e que atendentes realizem vendas no PDV de forma idempotente e auditável. O projeto contém documentação de requisitos, diagramas de arquitetura (C4/PlantUML) e esboços de API.
+---
+
+## 👥 Alunos
+
+| Nome | Matrícula |
+|-|-|
+| Pedro Felipe De Moraes Carrijo | 2025200257 |
+| Higor Stefany dos Santos Nóbrega | 2025200230 |
+| Raniere Luiz Pereira Neto | 2025200258 |
 
 ---
 
