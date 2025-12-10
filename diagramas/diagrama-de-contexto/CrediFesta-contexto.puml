@@ -4,10 +4,10 @@ LAYOUT_WITH_LEGEND()
 
 title CrediFesta — Diagrama de Contexto (C4 Nível 1)
 
-Person(responsavel, "Responsável (Pai/Mãe)", "Recarrega créditos, define limites, consulta saldo/histórico.")
-Person(aluno, "Aluno", "Exibe QR/código; consulta saldo.")
-Person(atendente, "Atendente (PDV)", "Escaneia QR, totaliza itens e confirma venda.")
-Person(organizador, "Organizador/Administrador", "Cadastra eventos, catálogos, equipes; relatórios.")
+Person(responsavel, "Responsável (Pai/Mãe)", "Cadastra conta, vincula filhos, recarrega créditos (PIX/cartão), define limites, consulta saldo/histórico, visualiza cardápio, recebe notificações.")
+Person(aluno, "Aluno", "Apresenta QR/código para compras; consulta saldo; realiza compras rápidas.")
+Person(atendente, "Atendente (PDV)", "Escaneia QR, verifica saldo, totaliza itens, confirma venda, consulta histórico de vendas.")
+Person(organizador, "Organizador/Administrador", "Cadastra eventos, gerencia produtos/preços, gerencia usuários, gera relatórios, realiza fechamento financeiro, configura métodos de pagamento.")
 
 System(credifesta, "CrediFesta", "App/Web + API para gestão de créditos e vendas em eventos escolares.")
 
@@ -17,10 +17,10 @@ System_Ext(storage, "Armazenamento de Arquivos", "S3/MinIO")
 System_Ext(kms, "KMS/Vault", "Gestão/rotação de chaves (HMAC/cripto)")
 System_Ext(obs, "Observabilidade/Logs", "Métricas (p95), logs, traços")
 
-Rel(responsavel, credifesta, "Recarrega (PIX/cartão), define limite, recebe avisos", "HTTPS/TLS")
-Rel(aluno,       credifesta, "Gera QR dinâmico; consulta saldo", "HTTPS/TLS")
-Rel(atendente,   credifesta, "Lê QR → valida → débito (PDV)", "HTTPS/TLS")
-Rel(organizador, credifesta, "Administra eventos/produtos/relatórios", "HTTPS/TLS")
+Rel(responsavel, credifesta, "Cadastra conta, vincula filhos, recarrega (PIX/cartão), define limite, consulta saldo/histórico, visualiza cardápio, recebe notificações", "HTTPS/TLS")
+Rel(aluno,       credifesta, "Apresenta QR/código; consulta saldo; realiza compras", "HTTPS/TLS")
+Rel(atendente,   credifesta, "Escaneia QR → verifica saldo → totaliza → confirma débito (PDV)", "HTTPS/TLS")
+Rel(organizador, credifesta, "Cadastra eventos, gerencia produtos/preços, gerencia usuários, gera relatórios, realiza fechamento financeiro, configura métodos de pagamento", "HTTPS/TLS")
 
 Rel(credifesta, psp, "Cria cobranças, captura; recebe webhooks", "HTTPS + HMAC")
 Rel(credifesta, notify, "Push/e-mail (compra, saldo baixo)", "HTTPS")

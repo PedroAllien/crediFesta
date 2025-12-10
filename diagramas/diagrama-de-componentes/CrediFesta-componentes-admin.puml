@@ -1,0 +1,94 @@
+@startuml CrediFesta_API_Components_Admin
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title CrediFesta — C4 (Nível 3) • Componentes Administrativos
+
+' ------------------------------------------------------------
+' Limite do Container: API Backend - Admin
+' ------------------------------------------------------------
+Container_Boundary(api_b, "API Backend (Django/DRF)") {
+
+  ' Autenticação e Autorização
+  Component(auth, "Auth & Identidade", "DRF + JWT/Session", "Login/refresh, RBAC, ABAC (SoD), perfis.")
+
+  ' Gestão Administrativa
+  Component(eventos, "Eventos & Barracas", "Service/Views", "CRUD eventos; gerenciamento de barracas; atribuição de equipes/atendentes.")
+  Component(produtos, "Produtos & Catálogo", "Service/Views", "CRUD produtos; preços por barraca/evento; cardápio disponível.")
+  Component(alunos, "Alunos & Vínculos", "Service/Views", "CRUD alunos; vínculo responsável-aluno; identificadores únicos por evento.")
+  Component(usuarios, "Usuários (Admin)", "Service/Views", "Gerenciamento de usuários (pais, alunos, atendentes); configuração de métodos de pagamento; regras de repasse.")
+  Component(regras, "Regras de Negócio", "Service", "Limites diários; alertas de saldo baixo; validação de regras antes de vendas; configurações de estorno.")
+
+  ' Relatórios
+  Component(relatorios, "Relatórios", "Service", "Consultas, exportações CSV/PDF.")
+
+  ' Observabilidade
+  Component(obs, "Observabilidade", "Middleware/Exporters", "Métricas p50/p95/p99, error rate, traces, auditoria.")
+}
+
+' ------------------------------------------------------------
+' Dependências externas do Container API
+' ------------------------------------------------------------
+ContainerDb(db, "PostgreSQL", "Banco de Dados", "Dados transacionais (eventos, produtos, alunos, usuários).")
+Container(files, "S3/MinIO", "Arquivos", "Relatórios CSV/PDF, artefatos.")
+Container_Ext(telemetry, "Observabilidade", "Externo", "Métricas, logs, traços.")
+
+' ------------------------------------------------------------
+' Relações entre componentes internos
+' ------------------------------------------------------------
+' Autenticação e Autorização
+Rel(auth, eventos, "Autoriza acesso a eventos/barracas")
+Rel(auth, produtos, "Autoriza gestão de produtos")
+Rel(auth, alunos, "Autoriza gestão de alunos")
+Rel(auth, usuarios, "Autoriza gestão de usuários")
+Rel(auth, regras, "Autoriza configuração de regras")
+
+' Gestão Administrativa
+Rel(eventos, produtos, "Associa produtos a eventos/barracas")
+Rel(eventos, alunos, "Vincula alunos a eventos")
+Rel(usuarios, alunos, "Gerencia vínculos responsável-aluno")
+Rel(usuarios, eventos, "Atribui atendentes a barracas")
+Rel(regras, eventos, "Configura regras por evento")
+
+' Relatórios
+Rel(relatorios, eventos, "Consulta dados de eventos")
+Rel(relatorios, produtos, "Consulta dados de produtos")
+Rel(relatorios, alunos, "Consulta dados de alunos")
+
+' Persistência no Banco de Dados
+Rel(auth, db, "CRUD usuários/perfis", "SQL/TLS")
+Rel(eventos, db, "CRUD eventos e barracas", "SQL/TLS")
+Rel(produtos, db, "CRUD produtos e catálogo", "SQL/TLS")
+Rel(alunos, db, "CRUD alunos e vínculos", "SQL/TLS")
+Rel(usuarios, db, "CRUD usuários e configurações", "SQL/TLS")
+Rel(regras, db, "CRUD regras e limites", "SQL/TLS")
+Rel(relatorios, db, "Consultas agregadas", "SQL/TLS")
+
+' Exportação de Relatórios
+Rel(relatorios, files, "Exporta CSV/PDF", "S3 API (TLS)")
+
+' Observabilidade
+Rel(obs, telemetry, "Exporta métricas/logs/traços", "Agent/API")
+
+' ------------------------------------------------------------
+' Notas de decisões arquiteturais
+' ------------------------------------------------------------
+Note right of eventos
+**Gestão de Eventos:**
+- Suporte a múltiplos eventos simultâneos
+- Barracas podem ser atribuídas a eventos
+- Atendentes vinculados a barracas específicas
+- Permissões por evento/barraca (RN-07)
+end note
+
+Note bottom of produtos
+**Catálogo:**
+- Produtos podem ter preços diferentes por barraca
+- Preços podem variar por evento
+- Cardápio disponível para pais (RF-PAI-08)
+end note
+
+SHOW_LEGEND()
+@enduml

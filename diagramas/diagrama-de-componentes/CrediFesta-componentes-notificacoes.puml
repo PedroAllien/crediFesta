@@ -1,0 +1,86 @@
+@startuml CrediFesta_API_Components_Notificacoes
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+LAYOUT_WITH_LEGEND()
+
+title CrediFesta — C4 (Nível 3) • Componentes de Notificações e Processos Assíncronos
+
+' ------------------------------------------------------------
+' Limite do Container: API Backend - Notificações e Jobs
+' ------------------------------------------------------------
+Container_Boundary(api_b, "API Backend (Django/DRF)") {
+
+  ' Notificações
+  Component(notificacoes, "Notificações", "Adapter", "Push (Firebase/APNS) + e-mail transacional.")
+
+  ' Processos Assíncronos
+  Component(conciliacao, "Conciliação & Jobs", "Worker/Celery", "Batches: conciliação diária, fechamento, expirações.")
+  Component(relatorios, "Relatórios", "Service", "Consultas, exportações CSV/PDF.")
+
+  ' Observabilidade
+  Component(obs, "Observabilidade", "Middleware/Exporters", "Métricas p50/p95/p99, error rate, traces, auditoria.")
+}
+
+' ------------------------------------------------------------
+' Dependências externas do Container API
+' ------------------------------------------------------------
+ContainerDb(db, "PostgreSQL", "Banco de Dados", "Dados transacionais (vendas, recargas, conciliação).")
+Container(files, "S3/MinIO", "Arquivos", "Relatórios CSV/PDF, artefatos.")
+Container_Ext(push, "Notificações", "Externo", "Firebase/APNS + e-mail.")
+Container_Ext(psp, "Gateway/PSP", "Externo", "PIX, Cartão (PCI), antifraude/3DS, webhooks.")
+Container_Ext(telemetry, "Observabilidade", "Externo", "Métricas, logs, traços.")
+
+' ------------------------------------------------------------
+' Relações entre componentes internos
+' ------------------------------------------------------------
+' Notificações
+Rel(notificacoes, push, "Push/e-mail", "HTTPS/TLS")
+
+' Conciliação e Jobs
+Rel(conciliacao, psp, "Conciliação diária (PSP ↔ DB)", "HTTPS/TLS")
+Rel(conciliacao, relatorios, "Gera relatórios/fechamento")
+Rel(conciliacao, notificacoes, "Envio em lote (opcional)")
+
+' Persistência no Banco de Dados
+Rel(conciliacao, db, "Atualizações de conciliação/fechamento", "SQL/TLS")
+Rel(relatorios, db, "Consultas agregadas", "SQL/TLS")
+
+' Exportação de Relatórios
+Rel(relatorios, files, "Exporta CSV/PDF", "S3 API (TLS)")
+
+' Observabilidade
+Rel(obs, telemetry, "Exporta métricas/logs/traços", "Agent/API")
+
+' ------------------------------------------------------------
+' Notas de decisões arquiteturais
+' ------------------------------------------------------------
+Note right of notificacoes
+**Tipos de Notificação:**
+- Compra efetuada (RF-PAI-06)
+- Alerta de saldo baixo (RF-PAI-07)
+- Confirmação de pagamento
+- Chargeback/estorno
+- Eventos do sistema
+end note
+
+Note bottom of conciliacao
+**Processos Assíncronos:**
+- Conciliação diária (PSP ↔ DB)
+- Fechamento financeiro (RF-ADM-06)
+- Geração de relatórios em lote
+- Expiração de QR codes
+- Envio de notificações em lote
+end note
+
+Note left of relatorios
+**Relatórios:**
+- Por barraca/produto/período (RF-ADM-05)
+- Histórico de compras (RF-PAI-05)
+- Histórico de vendas (RF-ATE-06)
+- Exportação CSV/PDF
+- Processamento assíncrono para grandes volumes
+end note
+
+SHOW_LEGEND()
+@enduml

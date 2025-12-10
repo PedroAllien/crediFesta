@@ -16,19 +16,19 @@ skinparam defaultTextAlignment center
 title CrediFesta — C4: Containers (Nível 2)
 
 ' Pessoas (externos)
-Person(responsavel, "Responsável", "Recarrega créditos, define limites, consulta saldo/histórico.")
-Person(aluno, "Aluno", "Gera/mostra QR/código para compra; consulta saldo.")
-Person(atendente, "Atendente (PDV)", "Escaneia QR, seleciona itens e confirma venda.")
-Person(organizador, "Organizador/Administrador", "Cadastra evento, catálogo, equipe; emite relatórios.")
+Person(responsavel, "Responsável (Pai/Mãe)", "Cadastra conta, vincula filhos, recarrega créditos (PIX/cartão), define limites, consulta saldo/histórico, visualiza cardápio, recebe notificações.")
+Person(aluno, "Aluno", "Apresenta QR/código para compras; consulta saldo; realiza compras rápidas.")
+Person(atendente, "Atendente (PDV)", "Escaneia QR, verifica saldo, totaliza itens, confirma venda, consulta histórico de vendas.")
+Person(organizador, "Organizador/Administrador", "Cadastra eventos, gerencia produtos/preços, gerencia usuários, gera relatórios, realiza fechamento financeiro, configura métodos de pagamento.")
 
 ' Sistema em foco
 System_Boundary(sb, "CrediFesta") {
 
   ' Frontends
-  Container(web_admin, "Painel Admin (Web)", "React/Next (ou Django Admin)", "Gestão de eventos, produtos, usuários, relatórios.")
-  Container(web_pdv, "PDV Web/Tablet", "Web App (SPA)", "Venda rápida: escaneia QR, totaliza itens, confirma débito.")
-  Container(mob_responsavel, "App Responsável", "Flutter/Android+iOS", "Recarrega (PIX/cartão), saldo/histórico, limites, notificações.")
-  Container(mob_aluno, "App Aluno", "Flutter/Android+iOS", "Exibe QR/código dinâmico; consulta saldo.")
+  Container(web_admin, "Painel Admin (Web)", "React/Next (ou Django Admin)", "Gestão de eventos, produtos, usuários, relatórios, fechamento financeiro, configuração de métodos de pagamento.")
+  Container(web_pdv, "PDV Web/Tablet", "Web App (SPA)", "Venda rápida: escaneia QR, verifica saldo, totaliza itens, confirma débito, consulta histórico. Modo offline com sincronização.")
+  Container(mob_responsavel, "App Responsável", "Flutter/Android+iOS", "Cadastra conta, vincula filhos, recarrega (PIX/cartão), saldo/histórico, limites, visualiza cardápio, notificações.")
+  Container(mob_aluno, "App Aluno", "Flutter/Android+iOS", "Apresenta QR/código dinâmico; consulta saldo; realiza compras.")
 
   ' Backend
   Container(api, "API Backend", "Django/DRF", "Autenticação, regras de negócio, verificação de QR (nonce/assinatura), vendas idempotentes, relatórios.")
@@ -51,10 +51,10 @@ Rel(atendente, web_pdv, "Usa", "HTTPS/TLS")
 Rel(organizador, web_admin, "Usa", "HTTPS/TLS")
 
 ' Frontends -> API
-Rel(mob_responsavel, api, "Login, recarga, saldo/histórico, limites", "HTTPS/TLS")
-Rel(mob_aluno, api, "Gera QR/código dinâmico (p=payload, sig=HMAC)", "HTTPS/TLS")
-Rel(web_pdv, api, "Escanear QR → validar nonce/assinatura → criar venda", "HTTPS/TLS")
-Rel(web_admin, api, "CRUD eventos, catálogo, usuários; relatórios", "HTTPS/TLS")
+Rel(mob_responsavel, api, "Cadastra conta, login, vincula filhos, recarga, saldo/histórico, limites, visualiza cardápio", "HTTPS/TLS")
+Rel(mob_aluno, api, "Obtém QR/código dinâmico (p=payload, sig=HMAC); consulta saldo; realiza compras", "HTTPS/TLS")
+Rel(web_pdv, api, "Escanear QR → verificar saldo → validar nonce/assinatura → criar venda; consultar histórico", "HTTPS/TLS")
+Rel(web_admin, api, "CRUD eventos, catálogo, usuários; relatórios; fechamento financeiro; configuração de métodos de pagamento", "HTTPS/TLS")
 
 ' API -> Internos
 Rel(api, db, "CRUD transacional", "TLS/SSL (quando disponível)")
@@ -87,6 +87,7 @@ end note
 Note bottom of web_pdv
 Fluxo crítico de latência:
 p95 ≤ 2s (leitura → validação → débito)
+Modo offline: sincronização posterior (RNF-CON-01)
 end note
 
 ' Fluxo de venda (visão de relações)

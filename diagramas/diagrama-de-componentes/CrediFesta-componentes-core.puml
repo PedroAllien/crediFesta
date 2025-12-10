@@ -1,70 +1,77 @@
-@startuml CrediFesta_API_Components
+@startuml CrediFesta_API_Components_Core
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
 LAYOUT_WITH_LEGEND()
 
-title CrediFesta — C4 (Nível 3) • Componentes da API (Django/DRF)
+title CrediFesta — C4 (Nível 3) • Componentes Core (Vendas e Pagamentos)
 
 ' ------------------------------------------------------------
-' Limite do Container: API Backend
+' Limite do Container: API Backend - Core
 ' ------------------------------------------------------------
 Container_Boundary(api_b, "API Backend (Django/DRF)") {
 
+  ' Autenticação e Segurança
   Component(auth, "Auth & Identidade", "DRF + JWT/Session", "Login/refresh, RBAC, ABAC (SoD), perfis.")
   Component(qr_sign, "QR Signer", "HMAC (KMS/Vault)", "Gera/valida payload (p) + assinatura (sig), TTL, kid.")
   Component(anti_replay, "Anti-Replay", "Redis", "Registro de nonces com TTL (SETNX); bloqueia reuso.")
+  Component(idempotency, "Idempotency Store", "Redis", "Armazena Idempotency-Key de requisições (vendas/webhooks).")
+
+  ' Vendas e Créditos
   Component(vendas, "PDV/Vendas", "Service/Views", "Escanear QR → validar → débito; estorno; histórico. **Pontos de idempotência.**")
+  Component(creditos, "Créditos & Saldo", "Service", "Consulta saldo em tempo real; verificação antes de vendas; atualização após recargas/débitos.")
+  Component(regras, "Regras de Negócio", "Service", "Limites diários; alertas de saldo baixo; validação de regras antes de vendas; configurações de estorno.")
+
+  ' Pagamentos
   Component(pagamentos, "Pagamentos (PSP)", "Adapter", "PIX, Cartão tokenizado; 3DS/antifraude; conciliação parcial.")
   Component(webhooks, "Webhooks PSP", "Views", "Recebe confirmações/chargebacks. **Idempotente (event_id UNIQUE).**")
-  Component(notificacoes, "Notificações", "Adapter", "Push (Firebase/APNS) + e-mail transacional.")
-  Component(relatorios, "Relatórios", "Service", "Consultas, exportações CSV/PDF.")
-  Component(conciliacao, "Conciliação & Jobs", "Worker/Celery", "Batches: conciliação diária, fechamento, expirações.")
 
-  Component(idempotency, "Idempotency Store", "Redis", "Armazena Idempotency-Key de requisições (vendas/webhooks).")
+  ' Observabilidade
   Component(obs, "Observabilidade", "Middleware/Exporters", "Métricas p50/p95/p99, error rate, traces, auditoria.")
 }
 
 ' ------------------------------------------------------------
 ' Dependências externas do Container API
 ' ------------------------------------------------------------
-ContainerDb(db, "PostgreSQL", "Banco de Dados", "Dados transacionais (alunos, vendas, recargas, catálogos).")
+ContainerDb(db, "PostgreSQL", "Banco de Dados", "Dados transacionais (vendas, recargas, saldos).")
 Container(cache, "Redis", "Cache/Chaves", "Nonces e Idempotency-Keys.")
-Container(files, "S3/MinIO", "Arquivos", "Relatórios CSV/PDF, artefatos.")
 Container_Ext(psp, "Gateway/PSP", "Externo", "PIX, Cartão (PCI), antifraude/3DS, webhooks.")
-Container_Ext(push, "Notificações", "Externo", "Firebase/APNS + e-mail.")
 Container_Ext(kms, "KMS/Vault", "Externo", "Gestão/rotação de chaves (HMAC/cripto).")
 Container_Ext(telemetry, "Observabilidade", "Externo", "Métricas, logs, traços.")
 
 ' ------------------------------------------------------------
 ' Relações entre componentes internos
 ' ------------------------------------------------------------
+' Autenticação e Autorização
 Rel(auth, vendas, "Autoriza papéis/atributos (RBAC/ABAC)")
+
+' Fluxo de Vendas (Core) - Fluxo crítico p95 ≤ 2s
 Rel(vendas, qr_sign, "Valida assinatura (sig) / TTL")
 Rel(vendas, anti_replay, "Marca/checa nonce (SETNX/TTL)")
+Rel(vendas, creditos, "Verifica saldo antes de venda")
+Rel(vendas, regras, "Valida limites diários e regras")
+Rel(vendas, creditos, "Debita créditos após confirmação")
 Rel(vendas, pagamentos, "Cria/captura transação (quando necessário)")
 Rel(vendas, idempotency, "Verifica/grava Idempotency-Key")
-Rel(vendas, notificacoes, "Dispara push/e-mail (compra/estorno)")
-Rel(vendas, relatorios, "Consulta dados para extrato/histórico")
 
+' Créditos e Regras
+Rel(creditos, regras, "Aplica regras de limite e alertas")
+
+' Pagamentos e Webhooks
 Rel(pagamentos, psp, "Cria cobranças/autoriza; consulta status", "HTTPS/TLS + HMAC")
 Rel(webhooks, idempotency, "Confere event_id UNIQUE (idempotência)")
 Rel(webhooks, pagamentos, "Atualiza status/timeline pagamento")
-Rel(webhooks, vendas, "Confirma crédito/sincroniza efeitos (quando assíncrono)")
-Rel(webhooks, notificacoes, "Avisos de confirmação/chargeback")
+Rel(webhooks, creditos, "Atualiza saldo após confirmação PSP")
+Rel(pagamentos, creditos, "Credita após confirmação de pagamento")
 
-Rel(conciliacao, pagamentos, "Conciliação diária (PSP ↔ DB)")
-Rel(conciliacao, relatorios, "Gera relatórios/fechamento")
-Rel(conciliacao, notificacoes, "Envio em lote (opcional)")
-
+' Persistência no Banco de Dados
 Rel(auth, db, "CRUD usuários/perfis", "SQL/TLS")
 Rel(vendas, db, "Transações de venda/estorno", "SQL/TLS")
+Rel(creditos, db, "CRUD saldos e movimentações", "SQL/TLS")
+Rel(regras, db, "CRUD regras e limites", "SQL/TLS")
 Rel(pagamentos, db, "Persistência de tentativas/status", "SQL/TLS")
-Rel(relatorios, db, "Consultas agregadas", "SQL/TLS")
-Rel(conciliacao, db, "Atualizações de conciliação/fechamento", "SQL/TLS")
 
-Rel(relatorios, files, "Exporta CSV/PDF", "S3 API (TLS)")
-Rel(notificacoes, push, "Push/e-mail", "HTTPS/TLS")
+' Infraestrutura
 Rel(qr_sign, kms, "Obtém/rota chaves (kid)", "KMS API (TLS)")
 Rel(anti_replay, cache, "Nonces (TTL)", "TCP")
 Rel(idempotency, cache, "Idempotency-Keys", "TCP")
@@ -73,16 +80,22 @@ Rel(obs, telemetry, "Exporta métricas/logs/traços", "Agent/API")
 ' ------------------------------------------------------------
 ' Notas de fronteiras transacionais e idempotência
 ' ------------------------------------------------------------
-' Fronteira de transação (vendas/estorno)
-'   - Inicia transação DB
-'   - Verifica assinatura (qr_sign) e nonce (anti_replay)
-'   - Checa saldo/limites (regra)
-'   - Debita/estorna
-'   - Commit (se sucesso); rollback (se falha)
-'   - Registra Idempotency-Key (antes do commit)
-' Ponto de idempotência:
-'   - Vendas: header "Idempotency-Key" (UUID) → idempotency (Redis) -> retorna a mesma venda
-'   - Webhooks PSP: event_id UNIQUE (DB/Redis) → descarta replays
+Note right of vendas
+**Fluxo Crítico de Venda (p95 ≤ 2s):**
+1. Valida QR (qr_sign + anti_replay)
+2. Verifica saldo (creditos)
+3. Valida regras (regras)
+4. Debita créditos (creditos)
+5. Registra Idempotency-Key
+6. Commit transação
+end note
+
+Note bottom of webhooks
+**Idempotência:**
+- Webhooks: event_id UNIQUE
+- Vendas: Idempotency-Key (header)
+- Retentativas não duplicam operações
+end note
 
 SHOW_LEGEND()
 @enduml
