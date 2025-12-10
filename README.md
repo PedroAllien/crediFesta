@@ -9,9 +9,11 @@ CrediFesta é um projeto para gestão de créditos em eventos escolares. Permite
 
 | Nome | Matrícula |
 |-|-|
-| Pedro Felipe De Moraes Carrijo | 2025200257 |
+| Letícia Santos Camargo  | 2025200243 |
 | Higor Stefany dos Santos Nóbrega | 2025200230 |
+| Pedro Felipe De Moraes Carrijo | 2025200257 |
 | Raniere Luiz Pereira Neto | 2025200258 |
+
 
 ---
 
